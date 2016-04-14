@@ -28,7 +28,7 @@ class ObservationModeDAO(object):
     def save(self,observationMode):
         try:
             self.cursor.execute("insert into observation_mode(mode,id_camera) \
-            values (%s,%s)", (observationMode.mode, observationMode.id_camera)):
+            values (%s,%s)", (observationMode.mode, observationMode.id_camera))
             observationMode.id = self.cursor.lastrowid
             logging.info('A new Observation Mode named %s has been created  %s' % \
             (observationMode.mode,datetime.now().strftime("%H:%M:%S.%f")))
@@ -119,7 +119,7 @@ class HeaderDAO(object):
     def save(self,header,headerDefinition):
         try:  
             self.cursor.execute("insert into header(id_frame, extension, "+header.type+") \
-        values (%s,%s,%s)", (header.id_frame, header.extension, header.value))
+            values (%s,%s,%s)", (header.id_frame, header.extension, header.value))
             header.id = self.cursor.lastrowid
             sql2 = "insert into header_definition_header values (%s, %s)" % \
             (headerDefinition.id, header.id)
