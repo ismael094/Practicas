@@ -265,6 +265,7 @@ def getKeywordType(data):
     else:
         final_type = 'LONG'
     return final_type
+    
 def getInsertValue(data):
     if type(data) == bool:
         value = 'long_value'
