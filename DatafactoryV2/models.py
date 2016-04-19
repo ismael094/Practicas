@@ -27,6 +27,7 @@ class Frame(object):
         id_program = None
         id_observation_block = None
         path = None
+        file_name = None
         number_extensions = None
         number_frame = None
         id_principal_investigator = None
@@ -38,6 +39,7 @@ class HeaderDefinition(object):
         id = None
         comment = None
         name = None
+        version = None
         data_type = None
         visible = None
         id_camera = None
@@ -46,8 +48,8 @@ class Header(object):
     def __init__(self):
         id = None
         id_frame = None
+        orderKeyword = None
         extension = None
-        version = None
         string_value = None
         long_value = None
         double_value = None
