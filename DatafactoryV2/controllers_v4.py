@@ -98,9 +98,9 @@ class HeaderDefinitionSQLDAO(object):
             return False
     def save(self,headerDefinition):
         print "IF (EXISTS(select id from header_definition where comment = '%s' and \
-        name= '%s' and data_type = '%s' and id_observation_mode = '%s')) \
+        name= '%s' and data_type = '%s' and id_camera = '%s')) \
         THEN select id from header_definition where comment = '%s' and \
-        name= '%s' and data_type = '%s' and id_observation_mode = '%s'; ELSE \
+        name= '%s' and data_type = '%s' and id_camera = '%s'; ELSE \
         insert into header_definition(comment, name, data_type, \
         visible, id_observation_mode) values ('%s','%s','%s',1,%s);" % \
         (headerDefinition.comment,headerDefinition.name, headerDefinition.data_type, \
@@ -112,25 +112,47 @@ class HeaderDefinitionSQLDAO(object):
         headerDefinition.id = None
         return True
 
+class HeaderPDAO(object):
+    def __init__(self, cursor):
+        self.cursor = cursor
+        self.rows = []
+    def save(self,header,headerDefinition):
+        try: 
+            logging.debug('PDAO start')
+            self.cursor.execute("insert into header(id_frame,order_keyword,extension, "+header.type+") \
+            values (%s,%s,%s,%s)", (header.id_frame, header.orderKeyword, header.extension, header.value))
+            header.id = self.cursor.lastrowid
+            
+            self.rows.append([headerDefinition.id, header.id])
+
+            logging.debug('%s = %s' % (headerDefinition.name, header.value))
+            logging.debug('PDAO end')
+            return True
+        except MySQLdb.Error:
+            sql = "insert into header(id_frame,order_keyword,extension, "+header.type+") \
+            values (%s,%s,%s,%s)" % (header.id_frame, header.orderKeyword, header.extension, header.value)
+            logging.error('Error %s' % (sql))
+            return False
+
 class HeaderDAO(object):
     def __init__(self, cursor):
         self.cursor = cursor
     def save(self,header,headerDefinition):
-        try:  
+        try: 
+            logging.info('DAO start')
             self.cursor.execute("insert into header(id_frame,order_keyword,extension, "+header.type+") \
             values (%s,%s,%s,%s)", (header.id_frame, header.orderKeyword, header.extension, header.value))
             header.id = self.cursor.lastrowid
             sql2 = "insert into header_definition_header values (%s, %s)" % \
             (headerDefinition.id, header.id)
             self.cursor.execute(sql2)
-            logging.debug('%s = %s' %\
-            (headerDefinition.name, header.value))
+            logging.debug('%s = %s' % (headerDefinition.name, header.value))
+            logging.info('DAO end')
             return True
         except MySQLdb.Error:
             sql = "insert into header(id_frame,order_keyword,extension, "+header.type+") \
             values (%s,%s,%s,%s)" % (header.id_frame, header.orderKeyword, header.extension, header.value)
-            logging.error('Error %s' %\
-            (sql))
+            logging.error('Error %s' % (sql))
             return False
 class HeaderSQLDAO(object):
     def __init__(self, cursor):
@@ -239,7 +261,7 @@ def checkKeywordFrame(frame,data, path):
         try:
             dataAux[key] = data[0][key][0]
         except KeyError:
-            if key == 'INSTRUME' or key == 'OBSMODE' or key == 'DATE':
+            if key == 'DATE':
                 dataAux[key] = getDataByPath(key, path)
             elif key == 'DECDEG' or key == 'RADEG' or key == 'EXPTIME':
                 dataAux[key] = 0
@@ -334,7 +356,9 @@ class SetModels(object):
         self.headerDefinition = models.HeaderDefinition()
         self.header = models.Header() 
 
-def startScript(setModel,DAOs,args):
+def startScript(args):
+    DAOs = InitDAOsAndDB()
+    setModel = SetModels()
     route = args.route
     scan = args.scan
     default = args.default
@@ -343,6 +367,7 @@ def startScript(setModel,DAOs,args):
         start = fileScaner(setModel,DAOs,default, route)
     elif scan != True and fileextension != '':
         start = startDumpProcess(setModel,DAOs,route)
+    DAOs.db.close()
 
 def fileScaner(setModel,DAOs,pathRoot,path1):
     a = 0
@@ -352,14 +377,16 @@ def fileScaner(setModel,DAOs,pathRoot,path1):
         for root, dirs, files in os.walk(dire):
             for fil in files:
                 if fil.endswith(".fits"):
+                    logging.info('filescaner_begin')
                     a+=1
                     final_root = (os.path.join(root,fil))
-                    logging.debug('Frame %s open' % (final_root))
+                    logging.info('Frame %s open' % (final_root))
                     Open = startDumpProcess(setModel,DAOs,final_root)
-                    logging.debug('Frame %s closed' % (final_root))
+                    logging.info('Frame %s closed' % (final_root))
                     if a == 1000:
                         DAOs.db.commit()
                         a=0
+                    logging.info('filescaner_end')
     else:
         DAOs.db.commit()              
 
@@ -370,6 +397,7 @@ def startDumpProcess(setModel,DAOs,path):
 def getDataFitsImages(path):
     image = fits.open(path)
     data = []
+    logging.info('Starting getDataFitsImages')
     for extension in range(len(image)):
         datas = {}
         position = 0
@@ -380,15 +408,23 @@ def getDataFitsImages(path):
                 image[extension].header.comments[keyword], position]
         data.append(datas)
     image.close()
+    logging.info('getDataFitsImages done')
     return data
 
 def dataBasePopulator(setModel,DAOs,data,path):
-    logging.debug('Starting dataBasePopulatorHeader')
+    logging.info('Starting dataBasePopulatorHeader')
+    logging.info('dataframe start')
     dataBasePopulatorFrame(setModel,DAOs,data, path)
+    logging.info('dataframe finish')
+    logging.info('header start')
     for extension in range(len(data)):
+        logging.info('extension')
         for keyword in data[extension]:
             dataBasePopulatorHeaderDefinition(setModel,DAOs,data, path,extension,keyword)
             dataBasePopulatorHeader(setModel,DAOs,data, path,extension,keyword)
+        logging.info('extensions')
+    logging.info('header finish')
+    logging.info('dataBasePopulatorHeader end')
 def dataBasePopulatorFrame(setModel,DAOs,data,path):
     setCamera(setModel.camera, data,path)
     DAOs.cameraDAO.getId(setModel.camera)
@@ -405,7 +441,7 @@ def dataBasePopulatorHeaderDefinition(setModel,DAOs,data,path,extension,keyword)
     headerDefList = [data[extension][keyword][1],keyword,\
     keywordType,cameraId]
     setHeaderDefinition(setModel.headerDefinition,headerDefList)
-    if DAOs.headerDefinitionDAO.getId(setModel.headerDefinition) == False:
+    if not DAOs.headerDefinitionDAO.getId(setModel.headerDefinition):
         DAOs.headerDefinitionDAO.save(setModel.headerDefinition)
 def dataBasePopulatorHeader(setModel,DAOs,data,path,extension,keyword):
     value = data[extension][keyword][0]
@@ -442,12 +478,8 @@ if __name__ == '__main__':
     help='Use default route', default='/scidb/framedb/')
     args = parser.parse_args()
     logging.debug('--------------------------------------\
---The data dump has started at %s -----------\
-----------------------' % \
-    (datetime.now().strftime("%H:%M:%S.%f")))
-    DAOs = InitDAOsAndDB()
-    setModel = SetModels()
-    p1 = startScript(setModel,DAOs,args)
-    DAOs.db.close() 
-    logging.debug('The data dump has finished at %s' % \
-    (datetime.now().strftime("%H:%M:%S.%f")))
+--The data dump has started-----------\
+----------------------' )
+    
+    p1 = startScript(args)
+    logging.debug('The data dump has finished')
