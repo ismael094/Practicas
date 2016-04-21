@@ -2,10 +2,11 @@ import urllib, urllib2
 import base64
 import json
 import json,simplejson
+
 ssl._create_default_https_context = ssl._create_unverified_context
 class ExtractHeader(object):
     def __init__(self):
-        urlBase='https://calp-scidb1.grantecan.net:8443/scidb/rest/frames/query?base=1&offset=50'
+        self.urlBase='https://calp-scidb1.grantecan.net:8443/scidb/rest/frames/query?base=1&offset=50'
         value={}
         self._criterias=[]
         self._operators=[]
@@ -15,10 +16,7 @@ class ExtractHeader(object):
         authKey = base64.b64encode(user+":"+password)
         self.headers = {"Content-Type":"application/json", "Authorization":"Basic " + authKey}
     def request(self):
-        authKey = base64.b64encode("test:test")
-        headers = {"Content-Type":"application/json", "Authorization":"Basic " + authKey}
-        urlBase='https://calp-scidb1.grantecan.net:8443/scidb/rest/frames/query?base=1&offset=50'
-        request = urllib2.Request(urlBase, po.data)
+        request = urllib2.Request(self.urlBase, self.data)
         for key,value in headers.items():
             request.add_header(key,value)
             response = urllib2.urlopen(request)
@@ -29,10 +27,10 @@ class ExtractHeader(object):
     def dateRequest(self, init, end):
         sentence = '{"type":"datecriteria","end":"%s","init":"%s"}' % (end,init)
         self._criterias.append(sentence)
-    def programIdRequest(self, program):
+    def programRequest(self, program):
         sentence = '{"type":"programidcriteria","programID":"%s"}' % (program)
         self._criterias.append(sentence)
-    def observationBlockIdRequest(self, block):
+    def observationBlockRequest(self, block):
         sentence = '{"type":"observationblockidcriteria","observationBlockID":"%s"}' % (block)
         self._criterias.append(sentence)
     def instrumentRequest(self, instrument):
@@ -46,20 +44,7 @@ class ExtractHeader(object):
         leng = len(self._criterias) -1 
         self.lastCriteria = ''
     def removeOperator(self, index):
-        self._operators.pop(index)
-    def checked(self, key):
-        if self.lastCriteria == key:
-            operator = self.addOperator('OR')
-            self.lastCriteria = 'operator'
-            return operator 
-        elif self.lastCriteria == '':
-            self.lastCriteria = key
-        elif self.lastCriteria == 'operator':
-            self.lastCriteria = key
-        else:
-            operator = self.addOperator('AND')
-            self.lastCriteria = 'operator'
-            return operator    
+        self._operators.pop(index)  
     def defaultOperator(self):
         sentece = '{"type":"operatorcriteria","operator":"AND"}'
         return sentece
@@ -137,25 +122,6 @@ po.dateRequest('2016/01/25 12:00:00','2016/01/26 12:00:00')
 po.observationModeRequest('AOA')
 po.end()
 request = urllib2.Request('https://calp-scidb1:8443/scidb/rest/frames')
-class Frame(object):
-    def __init__(self):
-        id = None
-        id_camera = None
-        id_observation_mode = None
-        observation_date = None
-        observation_date_microsecond = None
-        exposition_time = None
-        state = None
-        is_raw = None
-        id_program = None
-        id_observation_block = None
-        path = None
-        file_name = None
-        number_extensions = None
-        number_frame = None
-        id_principal_investigator = None
-        radeg = None
-        decdeg = None
 
 exposureTime
 fitsKeywords
