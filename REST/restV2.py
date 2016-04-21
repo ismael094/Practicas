@@ -97,34 +97,110 @@ class Criterias(object):
                     data+=','+ write
             data+=']}'
         self.data = data
+class Credencials(object):
+    def __init__(self,user,password):
+        self.user = user
+        self.password = password
+    def login(self):
+        authKey = base64.b64encode(self.user+":"+self.password)
+        headers = {"Content-Type":"application/json", "Authorization":"Basic " + authKey}
+        return headers
+class Server(object):
+    def __init__(self, credencials):
+        try:
+            self.headers = credencials.login()
+        except NameError:
+            raise "No credencials"
+        self.urlBase = 'https://calp-scidb1.grantecan.net:8443/scidb/rest/frames'
+    def query(self, jsonCriterias, offset, limit):
+        url=self.urlBase+'/query?base=%s&offset=%s' % (limit,offset)
+        request = urllib2.Request(url, jsonCriterias)
+        for key,value in self.headers.items():
+            request.add_header(key,value)
+            response = urllib2.urlopen(request)
+        response = urllib2.urlopen(request)
+        data = response.read()
+        decoded = json.loads(data)
+        try:
+            preFrame = json.loads(data,object_hook=FrameObject)
+            self.results = preFrame.frame
+            print 'Request succefully'
+        except AttributeError:
+            print 'No image found' 
 
-class DateRequest(object):
-    def __new__(self, init, end):
+class CriteriaBuilder(object):
+    def __new__(self, criterias):
+        checkCriterias(self,criterias) 
+        data = '{"criterias" : ['
+        for item in range(len(criterias)):
+            if item >0:
+                data+=','
+            data+=criterias[item].build()
+        data+=']}'
+        return data
+    @staticmethod
+    def __checkCriterias(self,criterias):
+        order=[2,5,6,9,12,13,14]
+        for item in range(len(Criterias)):
+            if item in order:
+                if criterias[item].type != 'operatorcriteria':
+                    raise NameError('Error in the criterias')
+            elif not item in order:
+                if criterias[item].type == 'operatorcriteria':
+                    raise NameError('Error in the criterias')
+            else:
+                p = 0
+Criterias = []
+
+class DateCriteria(object):
+    def __init__(self, init, end):
         self.init = init
         self.end = end
-        sentence = '{"type":"datecriteria","end":"%s","init":"%s"}' % (end,init)
+        self.type='datecriteria'
+    def build(self):
+        sentence = '{"type": "'+self.type+'","end":"'+self.end+'","init":"'+self.init+'"}'
         return sentence
-class ProgramRequest(object):
-    def __new__(self, program):
+class ProgramCriteria(object):
+    def __init__(self, program):
         self.programId = program
-        sentence = '{"type":"programidcriteria","programID":"%s"}' % (program)
+        self.type = 'programidcriteria'
+    def build(self):
+        sentence = '{"type":"'+self.type+'","programID":"'+self.programId+'"}'
         return sentence
 
-class ObservationBlockRequest(object):
+class ObservationBlockCriteria(object):
     def __new__(self, block):
-        self.observationMode = block
-        sentence = '{"type":"observationblockidcriteria","observationBlockID":"%s"}' % (block)
+        self.observationBlock = block
+        self.type = 'observationblockidcriteria'
+    def build(self):
+        sentence = '{"type":"'+self.type+'","observationBlockID":"'+self.observationBlock+'"}'
         return sentence
 
-class InstrumentRequest(object):
-    def __new__(self, instrument):
+class InstrumentCriteria(object):
+    def __init__(self, instrument):
         self.instrument = instrument
-        sentence = '{"type":"instrumentcriteria","instrumentID":"%s"}' % (instrument)
+        self.type = 'instrumentcriteria'
+    def build(self):
+        sentence = '{"type":"'+self.type+'","instrumentID":"'+self.instrument+'"}'
         return sentence
 
-class ObservationModeRequest(object):
-    def __new__(self, obsmode):
+class ObservationModeCriteria(object):
+    def __init__(self, obsmode):
         self.observationMode = obsmode
-        sentence = '{"type":"observatiomodecriteria","observationMode":"%s"}' % (obsmode)
+        self.type = 'observatiomodecriteria'
+    def build(self):
+        sentence = '{"type":"'+self.type+'","observationMode":"'+self.observationMode+'"}'
+        return sentence
+class AndOperator(object):
+    def __init__(self):
+        self.type='operatorcriteria'
+    def build(self):
+        sentence = '{"type":"operatorcriteria","operator":"AND"}'
+        return sentence
+class OrOperator(object):
+    def __init__(self):
+        self.type='operatorcriteria'
+    def build(self):
+        sentence = '{"type":"operatorcriteria","operator":"OR"}'
         return sentence
 rest = Criterias()
