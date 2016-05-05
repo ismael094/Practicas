@@ -1,0 +1,4 @@
+python ./M1CS.py -l=$1 -L=$2 > orders
+chmod 777 orders
+echo $orders
+./orders

@@ -44,31 +44,37 @@ def prueba(a):
         return prueba(a-1) + prueba (a-2)
 def checkCriterias(criterias):
     stack = []
+    go=0
     a = ''
-    for item in range(len(criterias)):
-        if criterias[item].type != 'operatorcriteria':
+    for item in range(len(Criterias)):
+        if Criterias[item].type != 'operatorcriteria':
             stack.append(0)
-        if criterias[item].type == 'operatorcriteria':  
-            stack.append(1) 
-    item = 0
-    p = 0
-    a = ''
-    while item < len(stack):
-        go = item
-        if 1 == stack[item]:
-            if stack[item-2] == 0 and stack[item-1]:
-                stack.pop(item-2)
+            go+=1
+        if Criterias[item].type == 'operatorcriteria':
+            if stack[go-2] == 0 and stack[go-1] == 0:
+                stack.pop(go-2)
+                go-=1
             else:
-                print 
-            item = 0
-        item+=1
+                raise Exception('Error in the criterias')
     if len(stack)==1 and stack[0] == 0:
-        return 'WOOOOORKING'
+        return True
     else:
-        raise NameError('Error in criterias')
+        raise Exception('Error in criterias')
 
 
-
+item = 0
+p = 0
+a = ''
+while item < len(stack):
+    go = item
+    if 1 == stack[item]:
+        if stack[item-2] == 0 and stack[item-1]:
+            stack.pop(item-2)
+            item = 0
+        else:
+            print 'ERROR'
+        
+    item+=1
 
 
 

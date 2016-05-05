@@ -3,34 +3,34 @@ class Camera(object):
         self.id = None
         self.instrument = None
         self.camera = None
-        self.gcs_component = None
-        self.display_name = None
-        self.archive_directory = None
+        self.gcsComponent = None
+        self.displayName = None
+        self.archiveDirectory = None
         self.active = None
 
 class ObservationMode(object):
     def __init__(self):
         id = None
         mode = None
-        id_camera = None     
+        idCamera = None     
 
 class Frame(object):
     def __init__(self):
         id = None
-        id_camera = None
-        id_observation_mode = None
-        observation_date = None
-        observation_date_microsecond = None
-        exposition_time = None
+        idCamera = None
+        idObservationMode = None
+        observationDate = None
+        observationDateMicrosecond = None
+        expositionTime = None
         state = None
-        is_raw = None
-        id_program = None
-        id_observation_block = None
+        isRaw = None
+        idProgram = None
+        idObservation_block = None
         path = None
-        file_name = None
-        number_extensions = None
-        number_frame = None
-        id_principal_investigator = None
+        fileName = None
+        numberExtensions = None
+        numberFrame = None
+        idPrincipalInvestigator = None
         radeg = None
         decdeg = None
 
@@ -40,16 +40,16 @@ class HeaderDefinition(object):
         comment = None
         name = None
         version = None
-        data_type = None
+        dataType = None
         visible = None
-        id_camera = None
+        idCamera = None
 
 class Header(object):
     def __init__(self):
         id = None
-        id_frame = None
+        idFrame = None
         orderKeyword = None
         extension = None
-        string_value = None
-        long_value = None
-        double_value = None
+        stringValue = None
+        longValue = None
+        doubleValue = None

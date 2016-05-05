@@ -37,7 +37,7 @@ class Server(object):
         try:
             preFrame = json.loads(data,object_hook=FrameObject)
             self.results = Result(preFrame.frame)
-            print 'Request succefully'
+            print 'Request succefully - '+str(len(preFrame.frame))+' frames'
         except AttributeError:
             print 'No image found' 
 class Result(object):
@@ -50,12 +50,12 @@ class Result(object):
             pathSplit = self.__frame[number].path.rsplit('/')[1:]
             pathOrdered = pathSplit[::-1]   
             frameName = pathOrdered[0]
-            preList = [self.__frame[number].id, self.__frame[number].camera.instrument,\
+            preList = [number,self.__frame[number].id, self.__frame[number].camera.instrument,\
             self.__frame[number].observationMode.mode, self.__frame[number].observationDate, \
             self.__frame[number].programId, self.__frame[number].observationBlockId,\
             frameName, self.__frame[number].exposureTime, self.__frame[number].piName]
             postList.append(preList)
-        print tabulate(postList, headers=['ID', 'Instrument', 'ObservationMode', \
+        print tabulate(postList, headers=['Number', 'ID', 'Instrument', 'ObservationMode', \
         'ObservationDate','ProgramID','ObservationBlockID', 'Path', 'ExposureTime', \
         'PI'],tablefmt='orgtbl')
     def getFrameByNumber(self, number):
@@ -98,12 +98,42 @@ class Result(object):
             print 'This frame has not fitsKeywords'
         print tabulate(postList, headers=['IdHeader', 'Name', 'IdHeaderDefinition', \
         'DataType','Value'],tablefmt='orgtbl')
+    def getFramesByHeadersList(self,number,headerList):
+        postList = []
+        try:
+            for header in range(len(self.__frame[number].fitsKeywords)):
+                if self.__frame[number].fitsKeywords[header].fitsKeywordDef.name in headerList:
+                    if self.__frame[number].fitsKeywords[header].fitsKeywordDef.dataType == 'STRING':
+                        try:
+                            value = self.__frame[number].fitsKeywords[header].stringVal
+                        except AttributeError:
+                            value = 'NONE'
+                    elif self.__frame[number].fitsKeywords[header].fitsKeywordDef.dataType == 'LONG':
+                        try:
+                            value = self.__frame[number].fitsKeywords[header].longVal
+                        except AttributeError:
+                            value = 'NONE'
+                    elif self.__frame[number].fitsKeywords[header].fitsKeywordDef.dataType == 'DOUBLE':
+                        try:
+                            value = self.__frame[number].fitsKeywords[header].doubleVal
+                        except AttributeError:
+                            value = 'NONE'
+                    preList = [self.__frame[number].id,self.__frame[number].fitsKeywords[header].id, \
+                    self.__frame[number].fitsKeywords[header].fitsKeywordDef.name,\
+                    self.__frame[number].fitsKeywords[header].fitsKeywordDef.id, \
+                    self.__frame[number].fitsKeywords[header].fitsKeywordDef.dataType, \
+                    value]
+                    postList.append(preList)
+        except AttributeError:
+            print 'This frame has not fitsKeywords'
+        print tabulate(postList, headers=['IdFrame','IdHeader', 'Name', 'IdHeaderDefinition', \
+        'DataType','Value'],tablefmt='orgtbl')
 class CriteriaBuilder(object):
     def __init__(self, criterias):
         try:
             self.__checkCriterias(criterias)
-        except NameError:
-            raise NameError('Error in the criterias')
+        except Exception:
+            raise Exception('Error in the criterias')
         data = '{"criterias" : ['
         for item in range(len(criterias)):
             if item >0:
@@ -114,36 +144,22 @@ class CriteriaBuilder(object):
     @staticmethod
     def __checkCriterias(criterias):
         stack = []
+        go=0
         a = ''
         for item in range(len(criterias)):
             if criterias[item].type != 'operatorcriteria':
                 stack.append(0)
-            if criterias[item].type == 'operatorcriteria':  
-                stack.append(1) 
-        item = 0
-        p = 0
-        a = ''
-        while item <= len(stack):
-            go = item
-            if '001' in a:
-                for ran in range(go-1,go-4,-1):
-                    stack.pop(ran)
-                    go=ran
-                if go < 0:
-                    go = 0
-                stack.insert(go,0)
-                a=''
-                item = 0
-            else:
-                try:
-                    a+=str(stack[item])
-                except IndexError:
-                    pass
-                item+=1
+                go+=1
+            if criterias[item].type == 'operatorcriteria':
+                if stack[go-2] == 0 and stack[go-1] == 0:
+                    stack.pop(go-2)
+                    go-=1
+                else:
+                    raise Exception('Error in the criterias')
         if len(stack)==1 and stack[0] == 0:
-            return 'WOOOOORKING'
+            return True
         else:
-            raise NameError('Error in criterias')
+            raise Exception('Error in criterias')
 
 class DateCriteria(object):
     def __init__(self, init, end):
@@ -153,6 +169,7 @@ class DateCriteria(object):
     def build(self):
         sentence = '{"type": "'+self.type+'","end":"'+self.end+'","init":"'+self.init+'"}'
         return sentence
+
 class ProgramCriteria(object):
     def __init__(self, program):
         self.programId = program
@@ -189,23 +206,32 @@ class PrincipalInvestigatorCriteria(object):
         self.principalInvestigator = PI
         self.type = 'principalinvestigatornamecriteria'
     def build(self):
-        sentence = '{"type":"'+self.type+'","piName":"'+self.principalInvestigator+'"}'
+        sentence = '{"type":"'+self.type+'","principalInvestigator":"'+self.principalInvestigator+'"}'
         return sentence
-class ExposureTimeCriteria(object):
-    def __init__(self, startTime, operator=None,endTime=None):
+class RegionCriteria(object):
+    def __init__(self, ra, dec, rang):
+        self.raDeg = ra
+        self.decDeg = dec
+        self.range = rang
+        self.type = 'regioncriteria'
+    def build(self):
+        sentence = '{"type":"'+self.type+'","rigtAscention":"'+self.raDeg+'", "declination":"'+self.decDeg+'", "range":"'+str(self.range)+'"}'
+        return sentence
+class ExpositionTimeCriteria(object):
+    def __init__(self, startTime, endTime, operator='EQ'):
         self.startTime = startTime
         self.endTime = endTime
         self.operator = operator
         self.type = 'expositiontimecriteria'
     def build(self):
-        if self.endTime:
-            sentence = '{"type":"'+self.type+'","exposureTime":"'+self.exposureTime+'"}'
-        elif self.operator == '<':
-            sentence = '{"type":"'+self.type+'","exposureTime":"'+self.exposureTime+'"}'
-        elif self.operator == '>':
-            sentence = '{"type":"'+self.type+'","exposureTime":"'+self.exposureTime+'"}'
-        elif self.operator == '=':
-            sentence = '{"type":"'+self.type+'","exposureTime":"'+self.exposureTime+'"}'
+        if self.operator == 'EQ':
+            sentence = '{"type":"'+self.type+'","operator":"'+self.operator+'", "startTime" : "'+self.startTime+'"}'
+        elif self.operator == 'LT':
+            sentence = '{"type":"'+self.type+'","operator":"'+self.operator+'", "startTime" : "'+self.startTime+'"}'
+        elif self.operator == 'GT':
+            sentence = '{"type":"'+self.type+'", "operator":"'+self.operator+'", "startTime" : "'+self.startTime+'"}'
+        elif self.operator == 'BT':
+            sentence = '{"type":"'+self.type+'", "endTime" : "'+self.endTime+'", "operator":"'+self.operator+'", "startTime" : "'+self.startTime+'"}'
         return sentence
 class AndOperator(object):
     def __init__(self):

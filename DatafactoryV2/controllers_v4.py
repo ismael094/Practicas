@@ -9,8 +9,8 @@ class CameraDAO(object):
         camera.instrument+"'")
         results = self.cursor.fetchall()
         for row in results:
-            id_camera = row[0]
-        camera.id = id_camera
+            idCamera = row[0]
+        camera.id = idCamera
 
 class ObservationModeDAO(object):
     def __init__(self, cursor):
@@ -28,52 +28,55 @@ class ObservationModeDAO(object):
     def save(self,observationMode):
         try:
             self.cursor.execute("insert into observation_mode(mode,id_camera) \
-            values (%s,%s)", (observationMode.mode, observationMode.id_camera))
+            values (%s,%s)", (observationMode.mode, observationMode.idCamera))
             observationMode.id = self.cursor.lastrowid
             logging.info('New Observation Mode created %s' % \
             (observationMode.mode))
             return True
         except MySQLdb.Error:
-            logging.error('Error while inserting a new Observation Mode named %s %s' % \
-            (observationMode.mode,datetime.now().strftime("%H:%M:%S.%f")))
+            logging.error('Error while inserting a new Observation Mode named %s ' % \
+            (observationMode.mode))
             return False 
 
 class FrameDAO(object):
     def __init__(self, cursor):
         self.cursor = cursor
-    def save(self,frame):
-        sql = "insert into frame(id_camera, id_observation_mode, \
+        self.sentence = ("insert into frame(id_camera, id_observation_mode, \
         observation_date, observation_date_microsecond, exposition_time,state,is_raw, \
         id_program, id_observation_block,path, file_name, number_extensions, number_frame, id_principal_investigator, decdeg, \
-        radeg) values (%s,%s,'%s',%s,%s,'%s', %s, '%s', '%s', '%s','%s', %s, %s ,'%s', %s, %s)" % \
-        (frame.id_camera, frame.id_observation_mode, \
-        frame.observation_date, frame.observation_date_microsecond, \
-        frame.exposition_time, frame.state, frame.is_raw, \
-        frame.program,frame.blockId,frame.path,frame.file_name,\
-        frame.number_extensions, frame.number_frame, \
-        frame.id_principal_investigator, frame.decdeg,frame.radeg)
+        radeg) values (%s,%s,%s,%s,%s,%s, %s, %s, %s, %s,%s, %s, %s ,%s, %s, %s)")
+    def save(self,frame):
+        values =  (frame.idCamera, frame.idObservationMode, \
+        frame.observationDate, frame.observationDateMicrosecond, \
+        frame.expositionTime, frame.state, frame.isRaw, \
+        frame.program,frame.blockId,frame.path,frame.fileName,\
+        frame.numberExtensions, frame.numberFrame, \
+        frame.idPrincipalInvestigator, frame.decdeg,frame.radeg)
         try:
-            self.cursor.execute(sql)
+            self.cursor.execute(self.sentence, values)
             frame.id = self.cursor.lastrowid
             logging.debug('Frame inserted')
             return True
         except MySQLdb.Error:
             logging.error('Error while inserting frame: %s' %\
-            (sql))
+            (self.sentence % values))
             return False
 
 class HeaderDefinitionDAO(object):
     def __init__(self, cursor):
         self.cursor = cursor
+        self.sentence = ("select id from header_definition where comment = %s and \
+        name= %s and data_type = %s and id_camera = %s")
     def getId(self,headerDefinition):
-        self.cursor.execute("select id from header_definition where comment = %s and \
-        name= %s and data_type = %s and id_camera = %s", \
-        (headerDefinition.comment,headerDefinition.name, headerDefinition.data_type, \
-        headerDefinition.id_camera))
+        values = (headerDefinition.comment,headerDefinition.name, headerDefinition.dataType, \
+        headerDefinition.idCamera)
+        self.cursor.execute(self.sentence, values)
         results = self.cursor.fetchall()
+
         if len(results) > 0:
             for row in results:
                 headerDefinition.id = row[0]
+                return True
                 break
         else:
             return False
@@ -81,8 +84,8 @@ class HeaderDefinitionDAO(object):
         try:
             self.cursor.execute("insert into header_definition(comment, name, data_type, \
             visible, id_camera) values (%s,%s,%s,1,%s)", (headerDefinition.comment, \
-            headerDefinition.name, headerDefinition.data_type, \
-            headerDefinition.id_camera))
+            headerDefinition.name, headerDefinition.dataType, \
+            headerDefinition.idCamera))
             logging.debug('New header definition %s' %\
             (headerDefinition.name))
             headerDefinition.id = self.cursor.lastrowid
@@ -91,67 +94,40 @@ class HeaderDefinitionDAO(object):
             logging.error('Error while creating a new header definition %s'+\
             datetime.now().strftime("%H:%M:%S.%f"))
             return False
-class HeaderDefinitionSQLDAO(object):
-    def __init__(self, cursor):
-        self.cursor = cursor
-    def getId(self,headerDefinition):
-            return False
-    def save(self,headerDefinition):
-        print "IF (EXISTS(select id from header_definition where comment = '%s' and \
-        name= '%s' and data_type = '%s' and id_camera = '%s')) \
-        THEN select id from header_definition where comment = '%s' and \
-        name= '%s' and data_type = '%s' and id_camera = '%s'; ELSE \
-        insert into header_definition(comment, name, data_type, \
-        visible, id_observation_mode) values ('%s','%s','%s',1,%s);" % \
-        (headerDefinition.comment,headerDefinition.name, headerDefinition.data_type, \
-        headerDefinition.id_observation_mode,headerDefinition.comment,\
-        headerDefinition.name, headerDefinition.data_type, \
-        headerDefinition.id_observation_mode,headerDefinition.comment,\
-        headerDefinition.name, headerDefinition.data_type, \
-        headerDefinition.id_observation_mode)
-        headerDefinition.id = None
-        return True
-
-class HeaderPDAO(object):
-    def __init__(self, cursor):
-        self.cursor = cursor
-        self.rows = []
-    def save(self,header,headerDefinition):
-        try: 
-            logging.debug('PDAO start')
-            self.cursor.execute("insert into header(id_frame,order_keyword,extension, "+header.type+") \
-            values (%s,%s,%s,%s)", (header.id_frame, header.orderKeyword, header.extension, header.value))
-            header.id = self.cursor.lastrowid
-            
-            self.rows.append([headerDefinition.id, header.id])
-
-            logging.debug('%s = %s' % (headerDefinition.name, header.value))
-            logging.debug('PDAO end')
-            return True
-        except MySQLdb.Error:
-            sql = "insert into header(id_frame,order_keyword,extension, "+header.type+") \
-            values (%s,%s,%s,%s)" % (header.id_frame, header.orderKeyword, header.extension, header.value)
-            logging.error('Error %s' % (sql))
-            return False
 
 class HeaderDAO(object):
     def __init__(self, cursor):
         self.cursor = cursor
+        self.sentence = ("insert into header "
+            "(id_frame,order_keyword,extension, string_value, long_value, double_value) "
+            "values (%s,%s,%s,'%s',%s,%s)")
+        self.sentence2 = ("insert into header_definition_header values (%s, %s)")
     def save(self,header,headerDefinition):
         try: 
+            if header.type == 'string_value':
+                a = header.value;
+                b = None
+                c = None
+            elif header.type == 'long_value':
+                a = None
+                b = header.value
+                c = None
+            else:
+                a = None
+                b = None
+                c = header.value
+            values = (header.idFrame, header.orderKeyword, header.extension, a,b,c)
             logging.info('DAO start')
-            self.cursor.execute("insert into header(id_frame,order_keyword,extension, "+header.type+") \
-            values (%s,%s,%s,%s)", (header.id_frame, header.orderKeyword, header.extension, header.value))
+            self.cursor.execute(self.sentence, values)
             header.id = self.cursor.lastrowid
-            sql2 = "insert into header_definition_header values (%s, %s)" % \
-            (headerDefinition.id, header.id)
-            self.cursor.execute(sql2)
+            values2 = (headerDefinition.id, header.id)
+            self.cursor.execute(self.sentence2,values2)
             logging.debug('%s = %s' % (headerDefinition.name, header.value))
             logging.info('DAO end')
             return True
         except MySQLdb.Error:
             sql = "insert into header(id_frame,order_keyword,extension, "+header.type+") \
-            values (%s,%s,%s,%s)" % (header.id_frame, header.orderKeyword, header.extension, header.value)
+            values (%s,%s,%s,%s)" % (header.idFrame, header.orderKeyword, header.extension, header.value)
             logging.error('Error %s' % (sql))
             return False
 class HeaderSQLDAO(object):
@@ -163,8 +139,8 @@ class HeaderSQLDAO(object):
         where comment = '%s' and \
         name= '%s' and data_type = '%s' and id_observation_mode = '%s';" % \
         (header.id_frame, header.extension, header.value, \
-        headerDefinition.comment, headerDefinition.name, headerDefinition.data_type,\
-        headerDefinition.id_observation_mode)
+        headerDefinition.comment, headerDefinition.name, headerDefinition.dataType,\
+        headerDefinition.idObservation_mode)
 
 """
 Set
@@ -174,21 +150,21 @@ def setCamera(camera,data,path):
 def setObservationMode(observationMode,data,camera,path):
     observationMode.id = None
     observationMode.mode = checkKeywordObsModeCamera(data, 'OBSMODE',path)
-    observationMode.id_camera = camera.id
+    observationMode.idCamera = camera.id
 def setFrame(frame,data,path,camera, observationMode):
     id_camera = camera  
     raw = isRaw(path)
     checkKeywordFrame(frame,data,path)
     frame.id = None
-    frame.id_camera = camera
-    frame.id_observation_mode = observationMode
-    frame.observation_date_microsecond = 0
+    frame.idCamera = camera
+    frame.idObservationMode = observationMode
+    frame.observationDateMicrosecond = 0
     frame.state = 'COMMITED'
-    frame.is_raw = raw
+    frame.isRaw = raw
     frame.path = orderPath(path)
-    frame.file_name = getFileNamePath(path)
-    frame.number_extensions = len(data)
-    frame.number_frame = getNumberFrame(path)  
+    frame.fileName = getFileNamePath(path)
+    frame.numberExtensions = len(data)
+    frame.numberFrame = getNumberFrame(path)  
     if frame.blockId == '':
         logging.warning('Block ID is empty')
     return frame
@@ -196,12 +172,11 @@ def setFrame(frame,data,path,camera, observationMode):
 def setHeaderDefinition(headerDefinitionData, headerData):
     headerDefinitionData.comment = headerData[0]
     headerDefinitionData.name = headerData[1]
-    headerDefinitionData.data_type = headerData[2]
+    headerDefinitionData.dataType = headerData[2]
     headerDefinitionData.visible = 1
-    headerDefinitionData.id_camera = headerData[3]
-
+    headerDefinitionData.idCamera = headerData[3]
 def setHeader(headerData, headerList):
-    headerData.id_frame = headerList[1]
+    headerData.idFrame = headerList[1]
     headerData.extension = headerList[2]
     headerData.type = headerList[3]
     headerData.value = headerList[4]
@@ -211,9 +186,10 @@ def setHeader(headerData, headerList):
 Checks
 """
 
+
 def isRaw(path):
-    path_split = pathCut(path)
-    for item in path_split:
+    pathSplit = pathCut(path)
+    for item in pathSplit:
         if item == 'raw':
             is_raw=1
             break
@@ -221,25 +197,22 @@ def isRaw(path):
         is_raw=0
     return is_raw
 def orderPath(path):
-    path_split = pathCut(path)
-    pathNoFilename = ''
-    for key in path_split:
-        if not key.endswith(".fits"):
-            pathNoFilename += '/'+key
-        else:
-            pathNoFilename += '/'
+    pathSplit = pathCut(path)
+    pathSplit.pop()
+    pathNoFilename = '/'
+    pathNoFilename+="/".join(pathSplit)
     return pathNoFilename
 
 def getFileNamePath(path):
-    path_split = pathCut(path)
-    path_ordered = path_split[::-1]
-    return path_ordered[0]
+    pathSplit = pathCut(path)
+    pathOrdered = pathSplit[::-1]
+    return pathOrdered[0]
 
 def getDataByPath(keyword, path):
     values = {'INSTRUME' : 5 ,'OBSMODE' : 3,'DATE' : 4}
-    path_split = pathCut(path)
-    path_ordered = path_split[::-1]
-    return path_ordered[values[keyword]]
+    pathSplit = pathCut(path)
+    pathOrdered = pathSplit[::-1]
+    return pathOrdered[values[keyword]]
 
 def checkKeywordObsModeCamera(data, mode, path):
     if mode == 'INSTRUME':
@@ -253,6 +226,24 @@ def checkKeywordObsModeCamera(data, mode, path):
         except KeyError:
             return getDataByPath('OBSMODE', path)   
     logging.warning('Frame has not Keyword %s' % (mode))
+
+def checkObservationMode(data):
+    osirisBroadBand = ['OsirisBroasBandImage','OsirisBroadBandImages','OsirisBroadBandImaging', 'OsirisBradBandImaging', 'OsirisBroadBand']
+    osirisLongSlit = ['OsirisLongSlitSpectroscop', 'OsirisLongSlitSpectgroscopy', 'LongSlitSpectroscopy', 'OsirisLongSlitSpectrosopcy']
+    osirisDome = ['OsirisDomeFlats', 'OsiriDomeFlat']
+    osirisSky = ['OsirisSkyFLa', 'SkyFlat']
+    dic = {'OsirisBroadBAndImage' : osirisBroadBand, 'OsirisOsirisLongSlitLongSlit' : osirisLongSlit, 'OsirisDomeFlat' : osirisDome, 'OsirisSkyFlat' : osirisSky}
+    try:
+        obs = data[0]['OBSMODE']
+        for key in dic:
+            if obs in dic[key]:
+                data[0]['OBSMODE'] = key
+                break
+        else:
+            pass
+    except KeyError:
+        pass
+
 
 def checkKeywordFrame(frame,data, path):
     keyword =['DATE','EXPTIME','GTCOBID','PI','DECDEG','RADEG']
@@ -268,57 +259,57 @@ def checkKeywordFrame(frame,data, path):
             else:
                 dataAux[key] = 'None'
             logging.warning('Frame has not Keyword %s' % (key))
-    frame.observation_date = dataAux['DATE']
-    frame.exposition_time = dataAux['EXPTIME']
+    frame.observationDate = dataAux['DATE']
+    frame.expositionTime = dataAux['EXPTIME']
     frame.program = checkProgramKey(data)
     frame.blockId = dataAux['GTCOBID']
-    frame.id_principal_investigator = dataAux['PI']
+    frame.idPrincipalInvestigator = dataAux['PI']
     frame.decdeg = dataAux['DECDEG']
     frame.radeg = dataAux['RADEG']
 
 
 def checkProgramKey(data):
     try:
-        program_key = 'GTCPRGID'
-        return data[0][program_key][0]
+        programKey = 'GTCPRGID'
+        return data[0][programKey][0]
     except KeyError:
-        program_key = 'GTCPROGI'
+        programKey = 'GTCPROGI'
         try:
-            data[0][program_key]
-            logging.warning('ProgramId key (%s) ambiguous' % (program_key))
-            return data[0][program_key][0]
+            data[0][programKey]
+            logging.warning('ProgramId key (%s) ambiguous' % (programKey))
+            return data[0][programKey][0]
         except KeyError:
             logging.error('ProgramId not found')
             return 'None'
-    if data[0][program_key][0] == '':
+    if data[0][programKey][0] == '':
         logging.warning('ProgramId empty')
 
 def pathCut(path): 
-    path_split = path.rsplit('/')[1:]
-    return path_split  
+    pathSplit = path.rsplit('/')[1:]
+    return pathSplit  
 
 
 def getNumberFrame(path):
-    path_split = pathCut(path)
-    path_ordered = path_split[::-1]   
-    frameName = path_ordered[0]
+    pathSplit = pathCut(path)
+    pathOrdered = pathSplit[::-1]   
+    frameName = pathOrdered[0]
     frameNumber = frameName.rsplit('-')[::1]
     return frameNumber[0]
 
 def getKeywordType(data):
     if type(data) == bool:
-        final_type = 'LONG'
+        finalType = 'LONG'
     elif type(data) == str:
-        final_type = 'STRING'
+        finalType = 'STRING'
     elif type(data) == float:
-        final_type = 'DOUBLE'
+        finalType = 'DOUBLE'
     elif type(data) == long:
-        final_type = 'LONG'
+        finalType = 'LONG'
     elif type(data) == int:
-        final_type = 'LONG'
+        finalType = 'LONG'
     else:
-        final_type = 'LONG'
-    return final_type
+        finalType = 'LONG'
+    return finalType
 
 def getInsertValue(data):
     if type(data) == bool:
@@ -418,11 +409,9 @@ def dataBasePopulator(setModel,DAOs,data,path):
     logging.info('dataframe finish')
     logging.info('header start')
     for extension in range(len(data)):
-        logging.info('extension')
         for keyword in data[extension]:
             dataBasePopulatorHeaderDefinition(setModel,DAOs,data, path,extension,keyword)
             dataBasePopulatorHeader(setModel,DAOs,data, path,extension,keyword)
-        logging.info('extensions')
     logging.info('header finish')
     logging.info('dataBasePopulatorHeader end')
 def dataBasePopulatorFrame(setModel,DAOs,data,path):
@@ -436,7 +425,7 @@ def dataBasePopulatorFrame(setModel,DAOs,data,path):
     DAOs.frameDAO.save(setModel.frameData)
 def dataBasePopulatorHeaderDefinition(setModel,DAOs,data,path,extension,keyword):
     value = data[extension][keyword][0]
-    cameraId = setModel.frameData.id_camera
+    cameraId = setModel.frameData.idCamera
     keywordType = getKeywordType(value)
     headerDefList = [data[extension][keyword][1],keyword,\
     keywordType,cameraId]
