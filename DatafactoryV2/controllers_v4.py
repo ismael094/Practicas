@@ -130,6 +130,45 @@ class HeaderDAO(object):
             values (%s,%s,%s,%s)" % (header.idFrame, header.orderKeyword, header.extension, header.value)
             logging.error('Error %s' % (sql))
             return False
+class HeaderPDAO(object):
+    def __init__(self, cursor):
+        self.cursor = cursor
+        self.sentence = ("insert into header "
+            "(id_frame,order_keyword,extension, string_value, long_value, double_value) "
+            "values (%s,%s,%s,%s,%s,%s)")
+        self.sentence2 = ("insert into header_definition_header(id_header_definition,id_header) values (%s, %s)")
+        self.sentence2Data = []
+    def save(self,header,headerDefinition):
+        try: 
+            if header.type == 'string_value':
+                a = header.value;
+                b = None
+                c = None
+            elif header.type == 'long_value':
+                a = None
+                b = header.value
+                c = None
+            else:
+                a = None
+                b = None
+                c = header.value
+            values = (header.idFrame, header.orderKeyword, header.extension, a,b,c)
+            logging.info('DAO start')
+            self.cursor.execute(self.sentence, values)
+            header.id = self.cursor.lastrowid
+            self.sentence2Data.append((int(headerDefinition.id), int(header.id)))   
+            logging.debug('%s = %s' % (headerDefinition.name, header.value))
+            logging.info('DAO end')
+            return True
+        except MySQLdb.Error:
+            sql = "insert into header(id_frame,order_keyword,extension, string_value, long_value, double_value) \
+            values (%s,%s,%s,'%s',%s,%s)" % (header.idFrame, header.orderKeyword, header.extension, a,b,c)
+            logging.error('Error %s' % (sql))
+            return False
+    def save2(self):
+        self.cursor.executemany(self.sentence2,self.sentence2Data)
+        self.sentence2Data = []
+        
 class HeaderSQLDAO(object):
     def __init__(self, cursor):
         self.cursor = cursor
@@ -145,28 +184,20 @@ class HeaderSQLDAO(object):
 """
 Set
 """
-def setCamera(camera,data,path):
-    camera.instrument = checkKeywordObsModeCamera(data, 'INSTRUME',path)
-def setObservationMode(observationMode,data,camera,path):
+def setCamera(camera,data,checker):
+    camera.instrument = checker.checkKeywordObsModeCamera(data, 'INSTRUME')
+def setObservationMode(observationMode,data,camera,checker):
     observationMode.id = None
-    observationMode.mode = checkKeywordObsModeCamera(data, 'OBSMODE',path)
+    observationMode.mode = checker.checkKeywordObsModeCamera(data, 'OBSMODE')
     observationMode.idCamera = camera.id
-def setFrame(frame,data,path,camera, observationMode):
-    id_camera = camera  
-    raw = isRaw(path)
-    checkKeywordFrame(frame,data,path)
+def setFrame(frame,data,checker,camera, observationMode):
+    checker.checkKeywordFrame(frame,data)
     frame.id = None
     frame.idCamera = camera
     frame.idObservationMode = observationMode
     frame.observationDateMicrosecond = 0
     frame.state = 'COMMITED'
-    frame.isRaw = raw
-    frame.path = orderPath(path)
-    frame.fileName = getFileNamePath(path)
     frame.numberExtensions = len(data)
-    frame.numberFrame = getNumberFrame(path)  
-    if frame.blockId == '':
-        logging.warning('Block ID is empty')
     return frame
 
 def setHeaderDefinition(headerDefinitionData, headerData):
@@ -186,145 +217,126 @@ def setHeader(headerData, headerList):
 Checks
 """
 
-
-def isRaw(path):
-    pathSplit = pathCut(path)
-    for item in pathSplit:
-        if item == 'raw':
-            is_raw=1
-            break
-    else:
-        is_raw=0
-    return is_raw
-def orderPath(path):
-    pathSplit = pathCut(path)
-    pathSplit.pop()
-    pathNoFilename = '/'
-    pathNoFilename+="/".join(pathSplit)
-    return pathNoFilename
-
-def getFileNamePath(path):
-    pathSplit = pathCut(path)
-    pathOrdered = pathSplit[::-1]
-    return pathOrdered[0]
-
-def getDataByPath(keyword, path):
-    values = {'INSTRUME' : 5 ,'OBSMODE' : 3,'DATE' : 4}
-    pathSplit = pathCut(path)
-    pathOrdered = pathSplit[::-1]
-    return pathOrdered[values[keyword]]
-
-def checkKeywordObsModeCamera(data, mode, path):
-    if mode == 'INSTRUME':
-        try:
-            return data[0]['INSTRUME'][0]
-        except KeyError:
-            return getDataByPath('INSTRUME', path)
-    else:
-        try:
-            return data[0]['OBSMODE'][0]
-        except KeyError:
-            return getDataByPath('OBSMODE', path)   
-    logging.warning('Frame has not Keyword %s' % (mode))
-
-def checkObservationMode(data):
-    osirisBroadBand = ['OsirisBroasBandImage','OsirisBroadBandImages','OsirisBroadBandImaging', 'OsirisBradBandImaging', 'OsirisBroadBand']
-    osirisLongSlit = ['OsirisLongSlitSpectroscop', 'OsirisLongSlitSpectgroscopy', 'LongSlitSpectroscopy', 'OsirisLongSlitSpectrosopcy']
-    osirisDome = ['OsirisDomeFlats', 'OsiriDomeFlat']
-    osirisSky = ['OsirisSkyFLa', 'SkyFlat']
-    dic = {'OsirisBroadBAndImage' : osirisBroadBand, 'OsirisOsirisLongSlitLongSlit' : osirisLongSlit, 'OsirisDomeFlat' : osirisDome, 'OsirisSkyFlat' : osirisSky}
-    try:
-        obs = data[0]['OBSMODE']
-        for key in dic:
-            if obs in dic[key]:
-                data[0]['OBSMODE'] = key
+class Checker(object):
+    def __init__(self,path):
+        self.path = path
+        self.pathSplit = path.rsplit('/')[1:]
+        self.pathOrdered = self.pathSplit[::-1]
+    def isRaw(self):
+        for item in self.pathSplit:
+            if item == 'raw':
+                isRaw=1
                 break
         else:
-            pass
-    except KeyError:
-        pass
+            isRaw=0
+        return isRaw
+    def getPathWithoutFileName(self):
+        pathSplit = self.pathSplit
+        pathSplit.pop()
+        pathNoFilename = '/'
+        pathNoFilename+="/".join(pathSplit)
+        return pathNoFilename
 
+    def getFileName(self):
+        return self.pathOrdered[0]
 
-def checkKeywordFrame(frame,data, path):
-    keyword =['DATE','EXPTIME','GTCOBID','PI','DECDEG','RADEG']
-    dataAux={}
-    for key in keyword:
+    def getDataByPath(self,keyword):
+        values = {'INSTRUME' : 5 ,'OBSMODE' : 3,'DATE' : 4}
+        return self.pathOrdered[values[keyword]]
+
+    def checkKeywordObsModeCamera(self,data,mode):
+        if mode == 'INSTRUME':
+            try:
+                return data[0]['INSTRUME'][0]
+            except KeyError:
+                return self.getDataByPath('INSTRUME')
+        else:
+            try:
+                return data[0]['OBSMODE'][0]
+            except KeyError:
+                return self.getDataByPath('OBSMODE')   
+        logging.warning('Frame has not Keyword %s' % (mode))
+
+    def getNumberFrame(self):  
+        frameName = self.pathOrdered[0]
+        frameNumber = frameName.rsplit('-')[::1]
+        return frameNumber[0]
+
+    def checkKeywordFrame(self,frame,data):
+        keyword =['DATE','EXPTIME','GTCOBID','PI','DECDEG','RADEG']
+        dataAux={}
+        for key in keyword:
+            try:
+                dataAux[key] = data[0][key][0]
+            except KeyError:
+                if key == 'DATE':
+                    dataAux[key] = self.getDataByPath(key)
+                elif key == 'DECDEG' or key == 'RADEG' or key == 'EXPTIME':
+                    dataAux[key] = 0
+                else:
+                    dataAux[key] = 'None'
+                logging.warning('Frame has not Keyword %s' % (key))
+        frame.observationDate = dataAux['DATE']
+        frame.expositionTime = dataAux['EXPTIME']
+        frame.program = self.checkProgramKey(data)
+        frame.blockId = dataAux['GTCOBID']
+        if dataAux['GTCOBID'] == '':
+            logging.warning('Block ID is empty')
+        frame.idPrincipalInvestigator = dataAux['PI']
+        frame.decdeg = dataAux['DECDEG']
+        frame.radeg = dataAux['RADEG']
+        frame.isRaw = self.isRaw()
+        frame.path = self.getPathWithoutFileName()
+        frame.fileName = self.getFileName()
+        frame.numberFrame = self.getNumberFrame() 
+
+    def checkObservationMode(data):
+        osirisBroadBand = ['OsirisBroasBandImage','OsirisBroadBandImages','OsirisBroadBandImaging', 'OsirisBradBandImaging', 'OsirisBroadBand']
+        osirisLongSlit = ['OsirisLongSlitSpectroscop', 'OsirisLongSlitSpectgroscopy', 'LongSlitSpectroscopy', 'OsirisLongSlitSpectrosopcy']
+        osirisDome = ['OsirisDomeFlats', 'OsiriDomeFlat']
+        osirisSky = ['OsirisSkyFLa', 'SkyFlat']
+        dic = {'OsirisBroadBandImage' : osirisBroadBand, 'OsirisOsirisLongSlitLongSlit' : osirisLongSlit, 'OsirisDomeFlat' : osirisDome, 'OsirisSkyFlat' : osirisSky}
         try:
-            dataAux[key] = data[0][key][0]
-        except KeyError:
-            if key == 'DATE':
-                dataAux[key] = getDataByPath(key, path)
-            elif key == 'DECDEG' or key == 'RADEG' or key == 'EXPTIME':
-                dataAux[key] = 0
+            obs = data[0]['OBSMODE']
+            for key in dic:
+                if obs in dic[key]:
+                    data[0]['OBSMODE'] = key
+                    break
             else:
-                dataAux[key] = 'None'
-            logging.warning('Frame has not Keyword %s' % (key))
-    frame.observationDate = dataAux['DATE']
-    frame.expositionTime = dataAux['EXPTIME']
-    frame.program = checkProgramKey(data)
-    frame.blockId = dataAux['GTCOBID']
-    frame.idPrincipalInvestigator = dataAux['PI']
-    frame.decdeg = dataAux['DECDEG']
-    frame.radeg = dataAux['RADEG']
+                pass
+        except KeyError:
+            pass
 
-
-def checkProgramKey(data):
-    try:
-        programKey = 'GTCPRGID'
-        return data[0][programKey][0]
-    except KeyError:
-        programKey = 'GTCPROGI'
+    def checkProgramKey(self,data):
         try:
-            data[0][programKey]
-            logging.warning('ProgramId key (%s) ambiguous' % (programKey))
+            programKey = 'GTCPRGID'
             return data[0][programKey][0]
         except KeyError:
-            logging.error('ProgramId not found')
-            return 'None'
-    if data[0][programKey][0] == '':
-        logging.warning('ProgramId empty')
-
-def pathCut(path): 
-    pathSplit = path.rsplit('/')[1:]
-    return pathSplit  
-
-
-def getNumberFrame(path):
-    pathSplit = pathCut(path)
-    pathOrdered = pathSplit[::-1]   
-    frameName = pathOrdered[0]
-    frameNumber = frameName.rsplit('-')[::1]
-    return frameNumber[0]
+            programKey = 'GTCPROGI'
+            try:
+                data[0][programKey]
+                logging.warning('ProgramId key (%s) ambiguous' % (programKey))
+                return data[0][programKey][0]
+            except KeyError:
+                logging.error('ProgramId not found')
+                return 'None'
+        if data[0][programKey][0] == '':
+            logging.warning('ProgramId empty')
 
 def getKeywordType(data):
-    if type(data) == bool:
-        finalType = 'LONG'
-    elif type(data) == str:
-        finalType = 'STRING'
-    elif type(data) == float:
-        finalType = 'DOUBLE'
-    elif type(data) == long:
-        finalType = 'LONG'
-    elif type(data) == int:
-        finalType = 'LONG'
-    else:
-        finalType = 'LONG'
-    return finalType
+    types = {bool : 'LONG', str : 'STRING', float : 'DOUBLE', long : 'LONG', int : 'LONG'}
+    try:
+        return types[type(data)]
+    except KeyError:
+        return 'LONG'
 
 def getInsertValue(data):
-    if type(data) == bool:
-        value = 'long_value'
-    elif type(data) == str:
-        value = 'string_value'
-    elif type(data) == float:
-        value = 'double_value'
-    elif type(data) == long:
-        value = 'long_value'
-    elif type(data) == int:
-        value = 'long_value'
-    else:
-        value = 'long_value'
-    return value
+    types = {bool : 'long_value', str : 'string_value', float : 'double_value', long : 'long_value', int : 'long_value'}
+    try:
+        return types[type(data)]
+    except KeyError:
+        return 'LONG'
+
 
 """
 Controllers
@@ -337,7 +349,7 @@ class InitDAOsAndDB(object):
         self.cameraDAO = CameraDAO(self.cursor)
         self.observationModeDAO = ObservationModeDAO(self.cursor)
         self.headerDefinitionDAO = HeaderDefinitionDAO(self.cursor)
-        self.headerDAO = HeaderDAO(self.cursor)
+        self.headerDAO = HeaderPDAO(self.cursor)
 
 class SetModels(object):
     def __init__(self):
@@ -383,7 +395,8 @@ def fileScaner(setModel,DAOs,pathRoot,path1):
 
 def startDumpProcess(setModel,DAOs,path):
     data = getDataFitsImages(path)
-    dump = dataBasePopulator(setModel,DAOs,data, path)
+    checker = Checker(path)
+    dump = dataBasePopulator(setModel,DAOs,data, checker)
 
 def getDataFitsImages(path):
     image = fits.open(path)
@@ -402,28 +415,30 @@ def getDataFitsImages(path):
     logging.info('getDataFitsImages done')
     return data
 
-def dataBasePopulator(setModel,DAOs,data,path):
-    logging.info('Starting dataBasePopulatorHeader')
-    logging.info('dataframe start')
-    dataBasePopulatorFrame(setModel,DAOs,data, path)
-    logging.info('dataframe finish')
-    logging.info('header start')
+def dataBasePopulator(setModel,DAOs,data,checker):
+    logging.info('Starting DataBasePopulator')
+    logging.info('Frame dump start')
+    dataBasePopulatorFrame(setModel,DAOs,data, checker)
+    logging.info('Frame dump finish')
+    logging.info('Header dump start')
     for extension in range(len(data)):
         for keyword in data[extension]:
-            dataBasePopulatorHeaderDefinition(setModel,DAOs,data, path,extension,keyword)
-            dataBasePopulatorHeader(setModel,DAOs,data, path,extension,keyword)
-    logging.info('header finish')
-    logging.info('dataBasePopulatorHeader end')
-def dataBasePopulatorFrame(setModel,DAOs,data,path):
-    setCamera(setModel.camera, data,path)
+            dataBasePopulatorHeaderDefinition(setModel,DAOs,data,extension,keyword)
+            dataBasePopulatorHeader(setModel,DAOs,data,extension,keyword)
+    DAOs.headerDAO.save2()
+
+    logging.info('Header dump finish')
+    logging.info('DataBasePopulator end')
+def dataBasePopulatorFrame(setModel,DAOs,data,checker):
+    setCamera(setModel.camera, data,checker)
     DAOs.cameraDAO.getId(setModel.camera)
-    setObservationMode(setModel.observationMode, data, setModel.camera,path)
+    setObservationMode(setModel.observationMode, data, setModel.camera,checker)
     if not DAOs.observationModeDAO.getId(setModel.observationMode):
         DAOs.observationModeDAO.save(setModel.observationMode)
-    setFrame(setModel.frameData, data, path, setModel.camera.id, \
+    setFrame(setModel.frameData, data, checker, setModel.camera.id, \
     setModel.observationMode.id)
     DAOs.frameDAO.save(setModel.frameData)
-def dataBasePopulatorHeaderDefinition(setModel,DAOs,data,path,extension,keyword):
+def dataBasePopulatorHeaderDefinition(setModel,DAOs,data,extension,keyword):
     value = data[extension][keyword][0]
     cameraId = setModel.frameData.idCamera
     keywordType = getKeywordType(value)
@@ -432,7 +447,7 @@ def dataBasePopulatorHeaderDefinition(setModel,DAOs,data,path,extension,keyword)
     setHeaderDefinition(setModel.headerDefinition,headerDefList)
     if not DAOs.headerDefinitionDAO.getId(setModel.headerDefinition):
         DAOs.headerDefinitionDAO.save(setModel.headerDefinition)
-def dataBasePopulatorHeader(setModel,DAOs,data,path,extension,keyword):
+def dataBasePopulatorHeader(setModel,DAOs,data,extension,keyword):
     value = data[extension][keyword][0]
     position = data[extension][keyword][2]
     keywordInsertValue = getInsertValue(value)
