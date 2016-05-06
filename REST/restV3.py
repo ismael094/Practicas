@@ -167,7 +167,7 @@ class DateCriteria(object):
         self.end = end
         self.type='datecriteria'
     def build(self):
-        sentence = '{"type": "'+self.type+'","end":"'+self.end+'","init":"'+self.init+'"}'
+        sentence = '{"type": "'+self.type+'","end":"'+self.end+' 12:00:00","init":"'+self.init+' 12:00:00"}'
         return sentence
 
 class ProgramCriteria(object):
@@ -177,9 +177,8 @@ class ProgramCriteria(object):
     def build(self):
         sentence = '{"type":"'+self.type+'","programID":"'+self.programId+'"}'
         return sentence
-
 class ObservationBlockCriteria(object):
-    def __new__(self, block):
+    def __init__(self, block):
         self.observationBlock = block
         self.type = 'observationblockidcriteria'
     def build(self):

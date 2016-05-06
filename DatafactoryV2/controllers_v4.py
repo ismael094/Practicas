@@ -127,7 +127,8 @@ class HeaderDAO(object):
             return True
         except MySQLdb.Error:
             sql = "insert into header(id_frame,order_keyword,extension, "+header.type+") \
-            values (%s,%s,%s,%s)" % (header.idFrame, header.orderKeyword, header.extension, header.value)
+            values (%s,%s,%s,%s)" % (header.idFrame, header.orderKeyword, header.extension,\
+            header.value)
             logging.error('Error %s' % (sql))
             return False
 class HeaderPDAO(object):
@@ -136,33 +137,30 @@ class HeaderPDAO(object):
         self.sentence = ("insert into header "
             "(id_frame,order_keyword,extension, string_value, long_value, double_value) "
             "values (%s,%s,%s,%s,%s,%s)")
-        self.sentence2 = ("insert into header_definition_header(id_header_definition,id_header) values (%s, %s)")
+        self.sentence2 = ("insert into header_definition_header(id_header_definition,id_header)\
+        values (%s, %s)")
         self.sentence2Data = []
     def save(self,header,headerDefinition):
         try: 
+            string = None
+            longVal = None
+            double = None
             if header.type == 'string_value':
-                a = header.value;
-                b = None
-                c = None
+                string = header.value
             elif header.type == 'long_value':
-                a = None
-                b = header.value
-                c = None
+                longVal = header.value
             else:
-                a = None
-                b = None
-                c = header.value
-            values = (header.idFrame, header.orderKeyword, header.extension, a,b,c)
-            logging.info('DAO start')
+                double = header.value
+            values = (header.idFrame, header.orderKeyword, header.extension, string,longVal,double)
             self.cursor.execute(self.sentence, values)
             header.id = self.cursor.lastrowid
             self.sentence2Data.append((int(headerDefinition.id), int(header.id)))   
             logging.debug('%s = %s' % (headerDefinition.name, header.value))
-            logging.info('DAO end')
             return True
         except MySQLdb.Error:
-            sql = "insert into header(id_frame,order_keyword,extension, string_value, long_value, double_value) \
-            values (%s,%s,%s,'%s',%s,%s)" % (header.idFrame, header.orderKeyword, header.extension, a,b,c)
+            sql = "insert into header(id_frame,order_keyword,extension, string_value,long_value,\
+            double_value) values (%s,%s,%s,'%s',%s,%s)" % (header.idFrame, header.orderKeyword, \
+            header.extension, string,longVal,double)
             logging.error('Error %s' % (sql))
             return False
     def save2(self):
@@ -175,9 +173,8 @@ class HeaderSQLDAO(object):
     def save(self,header, headerDefinition):
         print "insert into header(id_header_definition, id_frame, \
         extension, "+header.type+") SELECT id,'%s','%s','%s' from header_definition \
-        where comment = '%s' and \
-        name= '%s' and data_type = '%s' and id_observation_mode = '%s';" % \
-        (header.id_frame, header.extension, header.value, \
+        where comment = '%s' and name= '%s' and data_type = '%s' and \
+        id_observation_mode = '%s';" % (header.id_frame, header.extension, header.value, \
         headerDefinition.comment, headerDefinition.name, headerDefinition.dataType,\
         headerDefinition.idObservation_mode)
 
@@ -185,11 +182,13 @@ class HeaderSQLDAO(object):
 Set
 """
 def setCamera(camera,data,checker):
-    camera.instrument = checker.checkKeywordObsModeCamera(data, 'INSTRUME')
+    camera.instrument = checker.checkKeywordCamera(data)
+
 def setObservationMode(observationMode,data,camera,checker):
     observationMode.id = None
-    observationMode.mode = checker.checkKeywordObsModeCamera(data, 'OBSMODE')
+    observationMode.mode = checker.checkObservationMode(data)
     observationMode.idCamera = camera.id
+
 def setFrame(frame,data,checker,camera, observationMode):
     checker.checkKeywordFrame(frame,data)
     frame.id = None
@@ -206,6 +205,7 @@ def setHeaderDefinition(headerDefinitionData, headerData):
     headerDefinitionData.dataType = headerData[2]
     headerDefinitionData.visible = 1
     headerDefinitionData.idCamera = headerData[3]
+
 def setHeader(headerData, headerList):
     headerData.idFrame = headerList[1]
     headerData.extension = headerList[2]
@@ -222,6 +222,7 @@ class Checker(object):
         self.path = path
         self.pathSplit = path.rsplit('/')[1:]
         self.pathOrdered = self.pathSplit[::-1]
+
     def isRaw(self):
         for item in self.pathSplit:
             if item == 'raw':
@@ -230,6 +231,7 @@ class Checker(object):
         else:
             isRaw=0
         return isRaw
+
     def getPathWithoutFileName(self):
         pathSplit = self.pathSplit
         pathSplit.pop()
@@ -244,17 +246,11 @@ class Checker(object):
         values = {'INSTRUME' : 5 ,'OBSMODE' : 3,'DATE' : 4}
         return self.pathOrdered[values[keyword]]
 
-    def checkKeywordObsModeCamera(self,data,mode):
-        if mode == 'INSTRUME':
-            try:
-                return data[0]['INSTRUME'][0]
-            except KeyError:
-                return self.getDataByPath('INSTRUME')
-        else:
-            try:
-                return data[0]['OBSMODE'][0]
-            except KeyError:
-                return self.getDataByPath('OBSMODE')   
+    def checkKeywordCamera(self,data):
+        try:
+            return data[0]['INSTRUME'][0]
+        except KeyError:
+            return self.getDataByPath('INSTRUME')
         logging.warning('Frame has not Keyword %s' % (mode))
 
     def getNumberFrame(self):  
@@ -290,22 +286,28 @@ class Checker(object):
         frame.fileName = self.getFileName()
         frame.numberFrame = self.getNumberFrame() 
 
-    def checkObservationMode(data):
-        osirisBroadBand = ['OsirisBroasBandImage','OsirisBroadBandImages','OsirisBroadBandImaging', 'OsirisBradBandImaging', 'OsirisBroadBand']
-        osirisLongSlit = ['OsirisLongSlitSpectroscop', 'OsirisLongSlitSpectgroscopy', 'LongSlitSpectroscopy', 'OsirisLongSlitSpectrosopcy']
-        osirisDome = ['OsirisDomeFlats', 'OsiriDomeFlat']
-        osirisSky = ['OsirisSkyFLa', 'SkyFlat']
-        dic = {'OsirisBroadBandImage' : osirisBroadBand, 'OsirisOsirisLongSlitLongSlit' : osirisLongSlit, 'OsirisDomeFlat' : osirisDome, 'OsirisSkyFlat' : osirisSky}
-        try:
-            obs = data[0]['OBSMODE']
+    def checkObservationMode(self,data):
+        if self.checkKeywordCamera(data) == 'OSIRIS':
+            dataAux = {}
+            osirisBroadBand = ['OsirisBroasBandImage','OsirisBroadBandImages','OsirisBroadBandImaging', 'OsirisBradBandImaging', 'OsirisBroadBand']
+            osirisLongSlit = ['OsirisLongSlitSpectroscop', 'OsirisLongSlitSpectgroscopy', 'LongSlitSpectroscopy', 'OsirisLongSlitSpectrosopcy']
+            osirisDome = ['OsirisDomeFlats', 'OsiriDomeFlat']
+            osirisSky = ['OsirisSkyFLa', 'SkyFlat']
+            osirisTunable = ['TunableFilterImage','OsirisTunableFilter']
+            dic = {'OsirisBroadBandImage' : osirisBroadBand, 'OsirisLongSlitSpectroscopy' : osirisLongSlit,\
+            'OsirisDomeFlat' : osirisDome, 'OsirisSkyFlat' : osirisSky, 'OsirisTunableFilterImage': osirisTunable}
+            
+            try:
+                dataAux['OBSMODE'] = data[0]['OBSMODE'][0]
+            except KeyError:
+                dataAux['OBSMODE'] = self.getDataByPath('OBSMODE')
             for key in dic:
-                if obs in dic[key]:
-                    data[0]['OBSMODE'] = key
+                if dataAux['OBSMODE'] in dic[key]:
+                    dataAux['OBSMODE'] = key
                     break
             else:
                 pass
-        except KeyError:
-            pass
+            return dataAux['OBSMODE']  
 
     def checkProgramKey(self,data):
         try:
@@ -386,7 +388,7 @@ def fileScaner(setModel,DAOs,pathRoot,path1):
                     logging.info('Frame %s open' % (final_root))
                     Open = startDumpProcess(setModel,DAOs,final_root)
                     logging.info('Frame %s closed' % (final_root))
-                    if a == 1000:
+                    if a == 100:
                         DAOs.db.commit()
                         a=0
                     logging.info('filescaner_end')
@@ -426,9 +428,9 @@ def dataBasePopulator(setModel,DAOs,data,checker):
             dataBasePopulatorHeaderDefinition(setModel,DAOs,data,extension,keyword)
             dataBasePopulatorHeader(setModel,DAOs,data,extension,keyword)
     DAOs.headerDAO.save2()
-
     logging.info('Header dump finish')
     logging.info('DataBasePopulator end')
+
 def dataBasePopulatorFrame(setModel,DAOs,data,checker):
     setCamera(setModel.camera, data,checker)
     DAOs.cameraDAO.getId(setModel.camera)
@@ -438,6 +440,7 @@ def dataBasePopulatorFrame(setModel,DAOs,data,checker):
     setFrame(setModel.frameData, data, checker, setModel.camera.id, \
     setModel.observationMode.id)
     DAOs.frameDAO.save(setModel.frameData)
+
 def dataBasePopulatorHeaderDefinition(setModel,DAOs,data,extension,keyword):
     value = data[extension][keyword][0]
     cameraId = setModel.frameData.idCamera
@@ -447,6 +450,7 @@ def dataBasePopulatorHeaderDefinition(setModel,DAOs,data,extension,keyword):
     setHeaderDefinition(setModel.headerDefinition,headerDefList)
     if not DAOs.headerDefinitionDAO.getId(setModel.headerDefinition):
         DAOs.headerDefinitionDAO.save(setModel.headerDefinition)
+
 def dataBasePopulatorHeader(setModel,DAOs,data,extension,keyword):
     value = data[extension][keyword][0]
     position = data[extension][keyword][2]
@@ -456,7 +460,6 @@ def dataBasePopulatorHeader(setModel,DAOs,data,extension,keyword):
     setHeader(setModel.header,headerList)
     DAOs.headerDAO.save(setModel.header,setModel.headerDefinition)
     
-
 if __name__ == '__main__':
     from astropy.io import fits
     from datetime import datetime
