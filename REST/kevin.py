@@ -8,21 +8,7 @@ criterias.append(DateCriteria('2014-06-01','2014-06-27'))
 criterias.append(AndOperator())
 server.query(CriteriaBuilder(criterias), 100, 0)
 
-frames = server.results.frame
-
-for frame in frames:
-	if frame.isRaw=='1':
-		print frame.path
-		for keyword in frame.fitsKeywords:
-			try:
-				print keyword.fitsKeywordDef.name,
-				if keyword.fitsKeywordDef.dataType=='STRING':
-					print keyword.stringVal,
-				if keyword.fitsKeywordDef.dataType=='DOUBLE':
-					print keyword.doubleVal,
-				if keyword.fitsKeywordDef.dataType=='LONG':
-					print keyword.longVal,
-				print keyword.fitsKeywordDef.comment
-			except AttributeError:
-				pass
+frames = server.results.getFrames()
+frameByIndex = server.results.getFrameByIndex(2)
+frameWithHeaderList = server.results.getHeaderList(6, ['INSTRUME', 'PI'])
 

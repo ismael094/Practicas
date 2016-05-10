@@ -46,12 +46,12 @@ class FrameDAO(object):
         id_program, id_observation_block,path, file_name, number_extensions, number_frame, id_principal_investigator, decdeg, \
         radeg) values (%s,%s,%s,%s,%s,%s, %s, %s, %s, %s,%s, %s, %s ,%s, %s, %s)")
     def save(self,frame):
-        values =  (frame.idCamera, frame.idObservationMode, \
+        values =  (frame.camera.id, frame.observationMode.id, \
         frame.observationDate, frame.observationDateMicrosecond, \
-        frame.expositionTime, frame.state, frame.isRaw, \
-        frame.program,frame.blockId,frame.path,frame.fileName,\
+        frame.exposureTime, frame.state, frame.isRaw, \
+        frame.programId,frame.observationBlockId,frame.path,frame.fileName,\
         frame.numberExtensions, frame.numberFrame, \
-        frame.idPrincipalInvestigator, frame.decdeg,frame.radeg)
+        frame.piName, frame.decdeg,frame.radeg)
         try:
             self.cursor.execute(self.sentence, values)
             frame.id = self.cursor.lastrowid
@@ -69,7 +69,7 @@ class HeaderDefinitionDAO(object):
         name= %s and data_type = %s and id_camera = %s")
     def getId(self,headerDefinition):
         values = (headerDefinition.comment,headerDefinition.name, headerDefinition.dataType, \
-        headerDefinition.idCamera)
+        headerDefinition.camera.id)
         self.cursor.execute(self.sentence, values)
         results = self.cursor.fetchall()
 
@@ -85,7 +85,7 @@ class HeaderDefinitionDAO(object):
             self.cursor.execute("insert into header_definition(comment, name, data_type, \
             visible, id_camera) values (%s,%s,%s,1,%s)", (headerDefinition.comment, \
             headerDefinition.name, headerDefinition.dataType, \
-            headerDefinition.idCamera))
+            headerDefinition.camera.id))
             logging.debug('New header definition %s' %\
             (headerDefinition.name))
             headerDefinition.id = self.cursor.lastrowid
@@ -192,8 +192,8 @@ def setObservationMode(observationMode,data,camera,checker):
 def setFrame(frame,data,checker,camera, observationMode):
     checker.checkKeywordFrame(frame,data)
     frame.id = None
-    frame.idCamera = camera
-    frame.idObservationMode = observationMode
+    frame.camera = camera
+    frame.observationMode = observationMode
     frame.observationDateMicrosecond = 0
     frame.state = 'COMMITED'
     frame.numberExtensions = len(data)
@@ -204,7 +204,7 @@ def setHeaderDefinition(headerDefinitionData, headerData):
     headerDefinitionData.name = headerData[1]
     headerDefinitionData.dataType = headerData[2]
     headerDefinitionData.visible = 1
-    headerDefinitionData.idCamera = headerData[3]
+    headerDefinitionData.camera = headerData[3]
 
 def setHeader(headerData, headerList):
     headerData.idFrame = headerList[1]
@@ -273,12 +273,12 @@ class Checker(object):
                     dataAux[key] = 'None'
                 logging.warning('Frame has not Keyword %s' % (key))
         frame.observationDate = dataAux['DATE']
-        frame.expositionTime = dataAux['EXPTIME']
-        frame.program = self.checkProgramKey(data)
-        frame.blockId = dataAux['GTCOBID']
+        frame.exposureTime = dataAux['EXPTIME']
+        frame.programId = self.checkProgramKey(data)
+        frame.observationBlockId = dataAux['GTCOBID']
         if dataAux['GTCOBID'] == '':
             logging.warning('Block ID is empty')
-        frame.idPrincipalInvestigator = dataAux['PI']
+        frame.piName = dataAux['PI']
         frame.decdeg = dataAux['DECDEG']
         frame.radeg = dataAux['RADEG']
         frame.isRaw = self.isRaw()
@@ -437,16 +437,16 @@ def dataBasePopulatorFrame(setModel,DAOs,data,checker):
     setObservationMode(setModel.observationMode, data, setModel.camera,checker)
     if not DAOs.observationModeDAO.getId(setModel.observationMode):
         DAOs.observationModeDAO.save(setModel.observationMode)
-    setFrame(setModel.frameData, data, checker, setModel.camera.id, \
-    setModel.observationMode.id)
+    setFrame(setModel.frameData, data, checker, setModel.camera, \
+    setModel.observationMode)
     DAOs.frameDAO.save(setModel.frameData)
 
 def dataBasePopulatorHeaderDefinition(setModel,DAOs,data,extension,keyword):
     value = data[extension][keyword][0]
-    cameraId = setModel.frameData.idCamera
+    camera = setModel.frameData.camera
     keywordType = getKeywordType(value)
     headerDefList = [data[extension][keyword][1],keyword,\
-    keywordType,cameraId]
+    keywordType,camera]
     setHeaderDefinition(setModel.headerDefinition,headerDefList)
     if not DAOs.headerDefinitionDAO.getId(setModel.headerDefinition):
         DAOs.headerDefinitionDAO.save(setModel.headerDefinition)

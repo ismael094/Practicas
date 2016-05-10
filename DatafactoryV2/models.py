@@ -10,46 +10,49 @@ class Camera(object):
 
 class ObservationMode(object):
     def __init__(self):
-        id = None
-        mode = None
-        idCamera = None     
+        self.id = None
+        self.mode = None
+        self.idCamera = None     
 
 class Frame(object):
     def __init__(self):
-        id = None
-        idCamera = None
-        idObservationMode = None
-        observationDate = None
-        observationDateMicrosecond = None
-        expositionTime = None
-        state = None
-        isRaw = None
-        idProgram = None
-        idObservation_block = None
-        path = None
-        fileName = None
-        numberExtensions = None
-        numberFrame = None
-        idPrincipalInvestigator = None
-        radeg = None
-        decdeg = None
+        self.id = None
+        self.camera = []
+        self.observationMode = None
+        self.observationDate = None
+        self.observationDateMicrosecond = None
+        self.exposureTime = None
+        self.state = None
+        self.isRaw = None
+        self.programId = None
+        self.observationBlockId = None
+        self.path = None
+        self.fileName = None
+        self.numberExtensions = None
+        self.numberFrame = None
+        self.piName = None
+        self.radeg = None
+        self.decdeg = None
+        self.observationDateUsec = []
+        self.fitsKeywords=[]
 
 class HeaderDefinition(object):
     def __init__(self):
-        id = None
-        comment = None
-        name = None
-        version = None
-        dataType = None
-        visible = None
-        idCamera = None
+        self.id = None
+        self.comment = None
+        self.name = None
+        self.version = None
+        self.dataType = None
+        self.visible = None
+        self.obsMode = None
 
 class Header(object):
     def __init__(self):
-        id = None
-        idFrame = None
-        orderKeyword = None
-        extension = None
-        stringValue = None
-        longValue = None
-        doubleValue = None
+        self.id = None
+        self.idFrame = None
+        self.orderKeyword = None
+        self.extension = None
+        self.stringVal = None
+        self.longVal = None
+        self.doubleVal = None
+        self.fitsKeywordsDef = []
