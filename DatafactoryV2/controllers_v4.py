@@ -1,3 +1,13 @@
+from astropy.io import fits
+from datetime import datetime
+import models
+import argparse
+import os
+import time
+import logging
+import sys
+import MySQLdb
+import glob
 """
 DAO
 """
@@ -45,6 +55,7 @@ class FrameDAO(object):
         observation_date, observation_date_microsecond, exposition_time,state,is_raw, \
         id_program, id_observation_block,path, file_name, number_extensions, number_frame, id_principal_investigator, decdeg, \
         radeg) values (%s,%s,%s,%s,%s,%s, %s, %s, %s, %s,%s, %s, %s ,%s, %s, %s)")
+    
     def save(self,frame):
         values =  (frame.camera.id, frame.observationMode.id, \
         frame.observationDate, frame.observationDateMicrosecond, \
@@ -100,42 +111,6 @@ class HeaderDAO(object):
         self.cursor = cursor
         self.sentence = ("insert into header "
             "(id_frame,order_keyword,extension, string_value, long_value, double_value) "
-            "values (%s,%s,%s,'%s',%s,%s)")
-        self.sentence2 = ("insert into header_definition_header values (%s, %s)")
-    def save(self,header,headerDefinition):
-        try: 
-            if header.type == 'string_value':
-                a = header.value;
-                b = None
-                c = None
-            elif header.type == 'long_value':
-                a = None
-                b = header.value
-                c = None
-            else:
-                a = None
-                b = None
-                c = header.value
-            values = (header.idFrame, header.orderKeyword, header.extension, a,b,c)
-            logging.info('DAO start')
-            self.cursor.execute(self.sentence, values)
-            header.id = self.cursor.lastrowid
-            values2 = (headerDefinition.id, header.id)
-            self.cursor.execute(self.sentence2,values2)
-            logging.debug('%s = %s' % (headerDefinition.name, header.value))
-            logging.info('DAO end')
-            return True
-        except MySQLdb.Error:
-            sql = "insert into header(id_frame,order_keyword,extension, "+header.type+") \
-            values (%s,%s,%s,%s)" % (header.idFrame, header.orderKeyword, header.extension,\
-            header.value)
-            logging.error('Error %s' % (sql))
-            return False
-class HeaderPDAO(object):
-    def __init__(self, cursor):
-        self.cursor = cursor
-        self.sentence = ("insert into header "
-            "(id_frame,order_keyword,extension, string_value, long_value, double_value) "
             "values (%s,%s,%s,%s,%s,%s)")
         self.sentence2 = ("insert into header_definition_header(id_header_definition,id_header)\
         values (%s, %s)")
@@ -166,63 +141,57 @@ class HeaderPDAO(object):
     def save2(self):
         self.cursor.executemany(self.sentence2,self.sentence2Data)
         self.sentence2Data = []
-        
-class HeaderSQLDAO(object):
-    def __init__(self, cursor):
-        self.cursor = cursor
-    def save(self,header, headerDefinition):
-        print "insert into header(id_header_definition, id_frame, \
-        extension, "+header.type+") SELECT id,'%s','%s','%s' from header_definition \
-        where comment = '%s' and name= '%s' and data_type = '%s' and \
-        id_observation_mode = '%s';" % (header.id_frame, header.extension, header.value, \
-        headerDefinition.comment, headerDefinition.name, headerDefinition.dataType,\
-        headerDefinition.idObservation_mode)
 
 """
 Set
 """
-def setCamera(camera,data,checker):
-    camera.instrument = checker.checkKeywordCamera(data)
+class SetDataIntoModels(object):
+    def __init__(self,data, models,checker):
+        self.data = data
+        self.checker = checker
+        self.models = models
 
-def setObservationMode(observationMode,data,camera,checker):
-    observationMode.id = None
-    observationMode.mode = checker.checkObservationMode(data)
-    observationMode.idCamera = camera.id
+    def setCamera(self):
+        self.models.camera.instrument = self.checker.checkKeywordCamera()
 
-def setFrame(frame,data,checker,camera, observationMode):
-    checker.checkKeywordFrame(frame,data)
-    frame.id = None
-    frame.camera = camera
-    frame.observationMode = observationMode
-    frame.observationDateMicrosecond = 0
-    frame.state = 'COMMITED'
-    frame.numberExtensions = len(data)
-    return frame
+    def setObservationMode(self):
+        self.models.observationMode.id = None
+        self.models.observationMode.mode = self.checker.checkObservationMode()
+        self.models.observationMode.idCamera = self.models.camera.id
 
-def setHeaderDefinition(headerDefinitionData, headerData):
-    headerDefinitionData.comment = headerData[0]
-    headerDefinitionData.name = headerData[1]
-    headerDefinitionData.dataType = headerData[2]
-    headerDefinitionData.visible = 1
-    headerDefinitionData.camera = headerData[3]
+    def setFrame(self):
+        self.checker.checkKeywordFrame(self.models.frame)
+        self.models.frame.id = None
+        self.models.frame.camera = self.models.camera
+        self.models.frame.observationMode = self.models.observationMode
+        self.models.frame.observationDateMicrosecond = 0
+        self.models.frame.state = 'COMMITED'
+        self.models.frame.numberExtensions = len(self.data)
 
-def setHeader(headerData, headerList):
-    headerData.idFrame = headerList[1]
-    headerData.extension = headerList[2]
-    headerData.type = headerList[3]
-    headerData.value = headerList[4]
-    headerData.orderKeyword = headerList[5]
+    def setHeaderDefinition(self, headerData):
+        self.models.headerDefinition.comment = headerData[0]
+        self.models.headerDefinition.name = headerData[1]
+        self.models.headerDefinition.dataType = headerData[2]
+        self.models.headerDefinition.visible = False
+        self.models.headerDefinition.camera = self.models.camera
+
+    def setHeader(self, headerList):
+        self.models.header.idFrame = self.models.frame.id
+        self.models.header.extension = headerList[0]
+        self.models.header.type = headerList[1]
+        self.models.header.value = headerList[2]
+        self.models.header.orderKeyword = headerList[3]
 
 """
 Checks
 """
 
 class Checker(object):
-    def __init__(self,path):
+    def __init__(self,path,data):
         self.path = path
+        self.data = data
         self.pathSplit = path.rsplit('/')[1:]
         self.pathOrdered = self.pathSplit[::-1]
-
     def isRaw(self):
         for item in self.pathSplit:
             if item == 'raw':
@@ -246,9 +215,9 @@ class Checker(object):
         values = {'INSTRUME' : 5 ,'OBSMODE' : 3,'DATE' : 4}
         return self.pathOrdered[values[keyword]]
 
-    def checkKeywordCamera(self,data):
+    def checkKeywordCamera(self):
         try:
-            return data[0]['INSTRUME'][0]
+            return self.data[0]['INSTRUME'][0]
         except KeyError:
             return self.getDataByPath('INSTRUME')
         logging.warning('Frame has not Keyword %s' % (mode))
@@ -258,12 +227,12 @@ class Checker(object):
         frameNumber = frameName.rsplit('-')[::1]
         return frameNumber[0]
 
-    def checkKeywordFrame(self,frame,data):
+    def checkKeywordFrame(self,frame):
         keyword =['DATE','EXPTIME','GTCOBID','PI','DECDEG','RADEG']
         dataAux={}
         for key in keyword:
             try:
-                dataAux[key] = data[0][key][0]
+                dataAux[key] = self.data[0][key][0]
             except KeyError:
                 if key == 'DATE':
                     dataAux[key] = self.getDataByPath(key)
@@ -274,7 +243,7 @@ class Checker(object):
                 logging.warning('Frame has not Keyword %s' % (key))
         frame.observationDate = dataAux['DATE']
         frame.exposureTime = dataAux['EXPTIME']
-        frame.programId = self.checkProgramKey(data)
+        frame.programId = self.checkProgramKey()
         frame.observationBlockId = dataAux['GTCOBID']
         if dataAux['GTCOBID'] == '':
             logging.warning('Block ID is empty')
@@ -286,8 +255,8 @@ class Checker(object):
         frame.fileName = self.getFileName()
         frame.numberFrame = self.getNumberFrame() 
 
-    def checkObservationMode(self,data):
-        if self.checkKeywordCamera(data) == 'OSIRIS':
+    def checkObservationMode(self):
+        if self.checkKeywordCamera() == 'OSIRIS':
             dataAux = {}
             osirisBroadBand = ['OsirisBroasBandImage','OsirisBroadBandImages','OsirisBroadBandImaging', 'OsirisBradBandImaging', 'OsirisBroadBand']
             osirisLongSlit = ['OsirisLongSlitSpectroscop', 'OsirisLongSlitSpectgroscopy', 'LongSlitSpectroscopy', 'OsirisLongSlitSpectrosopcy']
@@ -298,7 +267,7 @@ class Checker(object):
             'OsirisDomeFlat' : osirisDome, 'OsirisSkyFlat' : osirisSky, 'OsirisTunableFilterImage': osirisTunable}
             
             try:
-                dataAux['OBSMODE'] = data[0]['OBSMODE'][0]
+                dataAux['OBSMODE'] = self.data[0]['OBSMODE'][0]
             except KeyError:
                 dataAux['OBSMODE'] = self.getDataByPath('OBSMODE')
             for key in dic:
@@ -309,35 +278,35 @@ class Checker(object):
                 pass
             return dataAux['OBSMODE']  
 
-    def checkProgramKey(self,data):
+    def checkProgramKey(self):
         try:
             programKey = 'GTCPRGID'
-            return data[0][programKey][0]
+            return self.data[0][programKey][0]
         except KeyError:
             programKey = 'GTCPROGI'
             try:
-                data[0][programKey]
+                self.data[0][programKey]
                 logging.warning('ProgramId key (%s) ambiguous' % (programKey))
-                return data[0][programKey][0]
+                return self.data[0][programKey][0]
             except KeyError:
                 logging.error('ProgramId not found')
                 return 'None'
-        if data[0][programKey][0] == '':
+        if self.data[0][programKey][0] == '':
             logging.warning('ProgramId empty')
 
-def getKeywordType(data):
-    types = {bool : 'LONG', str : 'STRING', float : 'DOUBLE', long : 'LONG', int : 'LONG'}
-    try:
-        return types[type(data)]
-    except KeyError:
-        return 'LONG'
+    def getKeywordType(self,data):
+        types = {bool : 'LONG', str : 'STRING', float : 'DOUBLE', long : 'LONG', int : 'LONG'}
+        try:
+            return types[type(data)]
+        except KeyError:
+            return 'LONG'
 
-def getInsertValue(data):
-    types = {bool : 'long_value', str : 'string_value', float : 'double_value', long : 'long_value', int : 'long_value'}
-    try:
-        return types[type(data)]
-    except KeyError:
-        return 'LONG'
+    def getInsertValue(self,data):
+        types = {bool : 'long_value', str : 'string_value', float : 'double_value', long : 'long_value', int : 'long_value'}
+        try:
+            return types[type(data)]
+        except KeyError:
+            return 'LONG'
 
 
 """
@@ -351,13 +320,13 @@ class InitDAOsAndDB(object):
         self.cameraDAO = CameraDAO(self.cursor)
         self.observationModeDAO = ObservationModeDAO(self.cursor)
         self.headerDefinitionDAO = HeaderDefinitionDAO(self.cursor)
-        self.headerDAO = HeaderPDAO(self.cursor)
+        self.headerDAO = HeaderDAO(self.cursor)
 
 class SetModels(object):
     def __init__(self):
         self.camera = models.Camera()
         self.observationMode = models.ObservationMode()
-        self.frameData = models.Frame()
+        self.frame = models.Frame()
         self.headerDefinition = models.HeaderDefinition()
         self.header = models.Header() 
 
@@ -397,8 +366,9 @@ def fileScaner(setModel,DAOs,pathRoot,path1):
 
 def startDumpProcess(setModel,DAOs,path):
     data = getDataFitsImages(path)
-    checker = Checker(path)
-    dump = dataBasePopulator(setModel,DAOs,data, checker)
+    checker = Checker(path,data)
+    dump = DataBasePopulator(setModel,DAOs,data, checker)
+    dump.startPopulator()
 
 def getDataFitsImages(path):
     image = fits.open(path)
@@ -416,61 +386,55 @@ def getDataFitsImages(path):
     image.close()
     logging.info('getDataFitsImages done')
     return data
+class DataBasePopulator(object):
+    def __init__(self, models, DAOs, data, checker):
+        self.models = models
+        self.DAOs = DAOs
+        self.data = data
+        self.checker = checker
+        self.setter = SetDataIntoModels(self.data,self.models,self.checker)
+    def startPopulator(self):
+        logging.info('Starting DataBasePopulator')
+        logging.info('Frame dump start')
+        self.framePopulator()
+        logging.info('Frame dump finish')
+        logging.info('Header dump start')
+        for extension in range(len(self.data)):
+            for keyword in self.data[extension]:
+                self.headerDefinitionPopulator(extension,keyword)
+                self.headerPopulator(extension,keyword)
+        self.DAOs.headerDAO.save2()
+        logging.info('Header dump finish')
+        logging.info('DataBasePopulator end')
 
-def dataBasePopulator(setModel,DAOs,data,checker):
-    logging.info('Starting DataBasePopulator')
-    logging.info('Frame dump start')
-    dataBasePopulatorFrame(setModel,DAOs,data, checker)
-    logging.info('Frame dump finish')
-    logging.info('Header dump start')
-    for extension in range(len(data)):
-        for keyword in data[extension]:
-            dataBasePopulatorHeaderDefinition(setModel,DAOs,data,extension,keyword)
-            dataBasePopulatorHeader(setModel,DAOs,data,extension,keyword)
-    DAOs.headerDAO.save2()
-    logging.info('Header dump finish')
-    logging.info('DataBasePopulator end')
+    def framePopulator(self):
+        self.setter.setCamera()
+        self.DAOs.cameraDAO.getId(self.models.camera)
+        self.setter.setObservationMode()
+        if not self.DAOs.observationModeDAO.getId(self.models.observationMode):
+            self.DAOs.observationModeDAO.save(self.models.observationMode)
+        self.setter.setFrame()
+        self.DAOs.frameDAO.save(self.models.frame)
 
-def dataBasePopulatorFrame(setModel,DAOs,data,checker):
-    setCamera(setModel.camera, data,checker)
-    DAOs.cameraDAO.getId(setModel.camera)
-    setObservationMode(setModel.observationMode, data, setModel.camera,checker)
-    if not DAOs.observationModeDAO.getId(setModel.observationMode):
-        DAOs.observationModeDAO.save(setModel.observationMode)
-    setFrame(setModel.frameData, data, checker, setModel.camera, \
-    setModel.observationMode)
-    DAOs.frameDAO.save(setModel.frameData)
+    def headerDefinitionPopulator(self,extension,keyword):
+        value = self.data[extension][keyword][0]
+        keywordType = self.checker.getKeywordType(value)
+        headerDefList = [self.data[extension][keyword][1],keyword,\
+        keywordType]
+        self.setter.setHeaderDefinition(headerDefList)
+        if not self.DAOs.headerDefinitionDAO.getId(self.models.headerDefinition):
+            self.DAOs.headerDefinitionDAO.save(self.models.headerDefinition)
 
-def dataBasePopulatorHeaderDefinition(setModel,DAOs,data,extension,keyword):
-    value = data[extension][keyword][0]
-    camera = setModel.frameData.camera
-    keywordType = getKeywordType(value)
-    headerDefList = [data[extension][keyword][1],keyword,\
-    keywordType,camera]
-    setHeaderDefinition(setModel.headerDefinition,headerDefList)
-    if not DAOs.headerDefinitionDAO.getId(setModel.headerDefinition):
-        DAOs.headerDefinitionDAO.save(setModel.headerDefinition)
-
-def dataBasePopulatorHeader(setModel,DAOs,data,extension,keyword):
-    value = data[extension][keyword][0]
-    position = data[extension][keyword][2]
-    keywordInsertValue = getInsertValue(value)
-    headerList = [setModel.headerDefinition.id, setModel.frameData.id, extension,\
-    keywordInsertValue, value, position]
-    setHeader(setModel.header,headerList)
-    DAOs.headerDAO.save(setModel.header,setModel.headerDefinition)
+    def headerPopulator(self, extension,keyword):
+        value = self.data[extension][keyword][0]
+        position = self.data[extension][keyword][2]
+        keywordInsertValue = self.checker.getInsertValue(value)
+        headerList = [extension, keywordInsertValue, value, position]
+        self.setter.setHeader(headerList)
+        self.DAOs.headerDAO.save(self.models.header,self.models.headerDefinition)
     
 if __name__ == '__main__':
-    from astropy.io import fits
-    from datetime import datetime
-    import models
-    import argparse
-    import os
-    import time
-    import logging
-    import sys
-    import MySQLdb
-    import glob
+    
 
     FORMAT = '%(asctime)-15s %(levelname)s %(message)s'
 
