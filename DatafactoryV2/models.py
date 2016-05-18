@@ -1,4 +1,5 @@
 class Camera(object):
+
     def __init__(self):
         self.id = None
         self.instrument = None
@@ -8,13 +9,17 @@ class Camera(object):
         self.archiveDirectory = None
         self.active = None
 
+
 class ObservationMode(object):
+
     def __init__(self):
         self.id = None
         self.mode = None
-        self.idCamera = None     
+        self.idCamera = None    
+
 
 class Frame(object):
+
     def __init__(self):
         self.id = None
         self.camera = []
@@ -36,7 +41,9 @@ class Frame(object):
         self.observationDateUsec = []
         self.fitsKeywords=[]
 
+
 class HeaderDefinition(object):
+
     def __init__(self):
         self.id = None
         self.comment = None
@@ -45,11 +52,14 @@ class HeaderDefinition(object):
         self.dataType = None
         self.visible = None
         self.obsMode = None
+        
 
 class Header(object):
+
     def __init__(self):
         self.id = None
         self.idFrame = None
+        self.idHeaderDefinition = None
         self.orderKeyword = None
         self.extension = None
         self.stringVal = None

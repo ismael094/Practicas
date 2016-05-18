@@ -101,13 +101,14 @@ DROP TABLE IF EXISTS `header`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `header` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id_header_definition` int(11) NOT NULL,
   `id_frame` int(11) NOT NULL,
   `order_keyword` int(11) NOT NULL,
   `extension` int(11) NOT NULL,
   `string_value` varchar(255) DEFAULT NULL,
   `long_value` int(11) DEFAULT NULL,
   `double_value` double DEFAULT NULL,
-  PRIMARY KEY (`id`,`id_frame`),
+  PRIMARY KEY (`id`,`id_frame`, `id_header_definition`),
   KEY `header_index` (`id_frame`)
 ) ENGINE=InnoDB AUTO_INCREMENT=16356 DEFAULT CHARSET=latin1
 /*!50100 PARTITION BY HASH ( `id_frame`)
@@ -134,22 +135,6 @@ CREATE TABLE `header_definition` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1123 DEFAULT CHARSET=latin1
 /*!50100 PARTITION BY HASH ( id_camera)
 PARTITIONS 100 */;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `header_definition-header`
---
-
-DROP TABLE IF EXISTS `header_definition_header`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `header_definition_header` (
-  `id_header_definition` int(11) NOT NULL ,
-  `id_header` int(11) NOT NULL,
-
-  PRIMARY KEY (`id_header_definition`,`id_header`),
-  KEY `header_definition-header_index` (`id_header_definition`,`id_header`)
-) ENGINE=InnoDB AUTO_INCREMENT=1123 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
